@@ -1,0 +1,118 @@
+#include <iostream>      // Incluimos biblioteca estándar.
+#include <fstream>       // Incluimos biblioteca para manejar archivos.
+#include <sstream>       // Incluimos biblioteca para manjera archivos de texto.
+#include <vector>        // Incluimos biblioteca de vectores.
+#include <string>        // Incluimos biblioteca para manejar strings.
+#include <unordered_map> // Incluimos biblioteca de para manejar mapas no ordenados.
+
+using namespace std; // Comando para evitar escribir "std::" antes de cada función de la blioteca estándar.
+
+typedef struct // Definimos un struct.
+{
+    int hora;     // Almacenamos la hora (0-23).
+    int minuto;   // Almacenamos el minuto (0-59).
+    int cantidad; // Rrepresentamos la variación en el número de asistentes (positivo si entran, negativo si salen).
+} VariacionFlujo; // Definimos la estructura "VariacionFlujo".
+
+VariacionFlujo *arregloAsistentes(string archivo, int *cantidad) // Definimos una función que devuelva un puntero a un arreglo de "VariacionFlujo". El parámetro "archivo" es el nombre del archivo binario que contiene los datos. El parámetro "cantidad" es el puntero a un entero donde se almacenará la cantidad de registros.
+{
+    ifstream file(archivo, ios::binary); // Creamos un flujo de entrada para leer "archivo" en modo binario.
+    if (!file)                           // Comprobamos si el archivo se abrió correctamente.
+    {
+        cerr << "Error al abrir el archivo de asistentes." << endl; // Mensaje que dirá la consola en caso de que no se abra el archivo.
+        *cantidad = 0;                                              // Asignamos "0" a "cantidad" para indicar que no hay datos disponibles.
+        return nullptr;                                             // Devuelve un puntero nulo, indicando que no se pudo obtener la información.
+    }
+
+    file.read(reinterpret_cast<char *>(cantidad), sizeof(int)); // Leemos la cantidad de registros almacenados en el archivo. Convertimos "cantidad" en un puntero "char*". Leemos con un entero la cantidad de registros que hay.
+    VariacionFlujo *registros = new VariacionFlujo[*cantidad];  // Reservamos memoria dinámica para almacenar los registros. Asignamos memoria para un arreglo de "VariacionFlujo" con "*cantidad". "registros" almacenará la dirección del primer elemento del arreglo.
+
+    file.read(reinterpret_cast<char *>(registros), (*cantidad) * sizeof(VariacionFlujo)); // Leemos los registros del archivo y los almacenamos en el arreglo dinámico. Convertimos el puntero "registro" a "char*".
+    file.close();                                                                         // Cerramos el archivo.
+    return registros;                                                                     // Devuelve el puntero al arreglo de estructuras "VariacionFlujo".
+}
+
+int cantidadAsistentes(string archivo, string hora) // Función que devuelve un entero representado la cantidad de asistentes en un momento específico.
+{
+    int total = 0, cantidad;                                       // Acumulamos la cantidad total de asistentes hasta la hora dada. Almacenamos la cantidad total de registros en el archivo.
+    int horaConsulta, minutoConsulta;                              // Guardamos la hora y el minuto extraídos de "hora".
+    sscanf(hora.c_str(), "%d:%d", &horaConsulta, &minutoConsulta); // Convertimos el string "hora" a dos enteros "horaConsulta" y "minutoConsulta". "%d:%d" indica que el formato es "hh:mm" y estraerá dos enteros.
+
+    VariacionFlujo *registros = arregloAsistentes(archivo, &cantidad); // Llamamos a "arregloAsistentes" para leer los registros desde el archivo binario.
+    if (!registros)                                                    // Si registros es "nullptr" significa que hubo un error al abrir el archivo, por lo que devuelve "0".
+        return 0;
+
+    for (int i = 0; i < cantidad; i++) // Recorremos todos los registros y suamamos los asistentes hasta una hora dada.
+    {
+        if (registros[i].hora < horaConsulta || (registros[i].hora == horaConsulta && registros[i].minuto <= minutoConsulta))
+        {
+            total += registros[i].cantidad;
+        }
+    }
+
+    delete[] registros; // Liberamos memoria dinámica.
+    return total;       // Devolvemos el número total de asistentes hasta la hora específica.
+}
+
+void cantidadEmpleados(string archivo, string hora, int *cantidad)
+{
+    ifstream file(archivo);
+    if (!file)
+    {
+        cerr << "Error al abrir el archivo de empleados." << endl;
+        *cantidad = 0;
+        return;
+    }
+
+    unordered_map<string, char> estadoEmpleados;
+    string linea, tipoEvento, rut, horaEvento;
+    int horaConsulta, minutoConsulta, horaArchivo, minutoArchivo;
+    sscanf(hora.c_str(), "%d:%d", &horaConsulta, &minutoConsulta);
+
+    while (getline(file, linea))
+    {
+        istringstream iss(linea);
+        iss >> tipoEvento >> rut >> horaEvento;
+        sscanf(horaEvento.c_str(), "%d:%d", &horaArchivo, &minutoArchivo);
+
+        if (horaArchivo < horaConsulta || (horaArchivo == horaConsulta && minutoArchivo <= minutoConsulta))
+        {
+            estadoEmpleados[rut] = tipoEvento[0];
+        }
+    }
+
+    *cantidad = 0;
+    for (auto &empleado : estadoEmpleados)
+    {
+        if (empleado.second == 'I')
+        {
+            (*cantidad)++;
+        }
+    }
+
+    file.close();
+}
+
+
+int *cantidadPersonas(string hora)
+{
+    static int resultado[2];                                         
+    resultado[0] = cantidadAsistentes("flujo-asistentes.dat", hora);
+    cantidadEmpleados("control-empleados.txt", hora, &resultado[1]); 
+    return resultado;
+}
+
+
+int main()
+{
+    string horaConsulta;
+    cout << "Ingrese la hora a consultar (hh:mm): ";
+    cin >> horaConsulta;
+
+    int *resultado = cantidadPersonas(horaConsulta);
+    cout << "Cantidad de asistentes: " << resultado[0] << endl;
+    cout << "Cantidad de empleados: " << resultado[1] << endl;
+    cout << "Total de personas en el evento: " << (resultado[0] + resultado[1]) << endl;
+
+    return 0;
+}
